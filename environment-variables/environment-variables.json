@@ -1,0 +1,62 @@
+{
+  "_comment": "Environment Variable definitions and values per environment. The 'definition' is in the solution (schema name, type, display name). The 'values' per environment must be set separately after import.",
+  "_howToApply": "Run: pac env-var set --schema-name <schemaName> --value <value> (after switching to the target env)",
+
+  "variables": [
+    {
+      "schemaName": "halyse_ApiEndpoint",
+      "displayName": "Halyse API Endpoint",
+      "type": "String",
+      "description": "Base URL of the Halyse integration API. Differs per environment.",
+      "values": {
+        "dev":  "https://dev-api.halyse.com/crm",
+        "test": "https://test-api.halyse.com/crm",
+        "prod": "https://api.halyse.com/crm"
+      }
+    },
+    {
+      "schemaName": "halyse_MaxRetries",
+      "displayName": "Max API Retry Attempts",
+      "type": "Integer",
+      "description": "Number of times the external integration plugin retries on transient failure.",
+      "values": {
+        "dev":  "2",
+        "test": "3",
+        "prod": "5"
+      }
+    },
+    {
+      "schemaName": "halyse_LogLevel",
+      "displayName": "Plugin Log Level",
+      "type": "String",
+      "description": "Controls verbosity of plugin trace logging. Values: Verbose, Info, Warning, Error",
+      "values": {
+        "dev":  "Verbose",
+        "test": "Info",
+        "prod": "Warning"
+      }
+    },
+    {
+      "schemaName": "halyse_EnableDebugMode",
+      "displayName": "Enable Debug Mode",
+      "type": "Boolean",
+      "description": "When true, plugins write detailed trace logs and skip external API calls (dry run).",
+      "values": {
+        "dev":  "true",
+        "test": "false",
+        "prod": "false"
+      }
+    },
+    {
+      "schemaName": "halyse_CreditLimitThreshold",
+      "displayName": "Credit Limit Warning Threshold",
+      "type": "Decimal",
+      "description": "Accounts with credit exposure above this % of credit limit trigger a warning.",
+      "values": {
+        "dev":  "0.75",
+        "test": "0.75",
+        "prod": "0.80"
+      }
+    }
+  ]
+}

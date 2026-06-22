@@ -1,0 +1,16 @@
+[
+  {
+    "_comment": "Connection reference mappings for TEST environment.",
+    "_note": "connectionId values come from Power Automate → Connections → (your connection) → Properties → ID",
+    "logicalName": "halyse_HalyseSharePoint",
+    "connectionId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline/connections/REPLACE-WITH-TEST-SHAREPOINT-CONNECTION-ID"
+  },
+  {
+    "logicalName": "halyse_HalyseOutlook",
+    "connectionId": "/providers/Microsoft.PowerApps/apis/shared_office365/connections/REPLACE-WITH-TEST-OUTLOOK-CONNECTION-ID"
+  },
+  {
+    "logicalName": "halyse_HalyseTeams",
+    "connectionId": "/providers/Microsoft.PowerApps/apis/shared_teams/connections/REPLACE-WITH-TEST-TEAMS-CONNECTION-ID"
+  }
+]

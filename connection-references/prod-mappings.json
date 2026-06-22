@@ -1,0 +1,16 @@
+[
+  {
+    "_comment": "Connection reference mappings for PRODUCTION environment.",
+    "_security": "Connection IDs here point to service account connections, not individual user connections.",
+    "logicalName": "halyse_HalyseSharePoint",
+    "connectionId": "/providers/Microsoft.PowerApps/apis/shared_sharepointonline/connections/REPLACE-WITH-PROD-SHAREPOINT-CONNECTION-ID"
+  },
+  {
+    "logicalName": "halyse_HalyseOutlook",
+    "connectionId": "/providers/Microsoft.PowerApps/apis/shared_office365/connections/REPLACE-WITH-PROD-OUTLOOK-CONNECTION-ID"
+  },
+  {
+    "logicalName": "halyse_HalyseTeams",
+    "connectionId": "/providers/Microsoft.PowerApps/apis/shared_teams/connections/REPLACE-WITH-PROD-TEAMS-CONNECTION-ID"
+  }
+]

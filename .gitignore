@@ -1,0 +1,9 @@
+exported/
+artifacts/
+checker-results/
+node_modules/
+*.log
+.DS_Store
+
+# Never commit real connection IDs or secrets
+# Use GitHub Secrets for PP_APP_ID, PP_CLIENT_SECRET, etc.

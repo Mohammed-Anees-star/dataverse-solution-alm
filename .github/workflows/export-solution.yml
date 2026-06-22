@@ -1,0 +1,83 @@
+# =============================================================================
+# WORKFLOW: Export Solutions from DEV → Source Control
+# =============================================================================
+# TRIGGER: Manual (workflow_dispatch) or scheduled (nightly sync)
+# PURPOSE: Keeps the git repo in sync with DEV environment changes.
+#
+# WHEN TO USE:
+#   After a developer makes changes in DEV (forms, flows, plugins via XrmToolBox),
+#   run this workflow to capture those changes as source-controlled XML files.
+#   The resulting commit is a PR-reviewable diff of what changed.
+#
+# WHAT HAPPENS:
+#   1. Authenticate to DEV via service principal
+#   2. Export each Halyse solution (unmanaged)
+#   3. Unpack to XML files (human-readable diff)
+#   4. Commit changes and push (if any)
+# =============================================================================
+
+name: Export Solutions from DEV
+
+on:
+  workflow_dispatch:          # Manual trigger from GitHub UI
+    inputs:
+      solution_name:
+        description: "Solution to export (leave empty for all)"
+        required: false
+        default: ""
+
+  schedule:
+    - cron: "0 2 * * 1-5"    # 2 AM UTC weekdays — nightly sync from DEV
+
+jobs:
+  export:
+    name: Export & Unpack Solutions
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write           # Needed to push the commit
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install PAC CLI
+        run: npm install -g @microsoft/power-platform-cli
+
+      - name: Authenticate to DEV
+        run: |
+          pac auth create \
+            --url "${{ secrets.PP_DEV_URL }}" \
+            --tenant "${{ secrets.PP_TENANT_ID }}" \
+            --applicationId "${{ secrets.PP_APP_ID }}" \
+            --clientSecret "${{ secrets.PP_CLIENT_SECRET }}"
+
+      - name: Export all solutions
+        run: |
+          SOLUTION="${{ github.event.inputs.solution_name }}"
+          ARGS=""
+          if [ -n "$SOLUTION" ]; then
+            ARGS="-SolutionName $SOLUTION"
+          fi
+
+          pwsh ./pipeline/export/export-solution.ps1 \
+            -DevUrl "${{ secrets.PP_DEV_URL }}" \
+            -TenantId "${{ secrets.PP_TENANT_ID }}" \
+            -AppId "${{ secrets.PP_APP_ID }}" \
+            -ClientSecret "${{ secrets.PP_CLIENT_SECRET }}" \
+            $ARGS
+
+      - name: Commit exported changes
+        run: |
+          git config user.name  "Halyse CI Bot"
+          git config user.email "ci@halyse.com"
+          git add ./solution-components/
+          if git diff --staged --quiet; then
+            echo "No changes to commit — DEV is in sync"
+          else
+            git commit -m "chore: Auto-export from DEV [$(date -u '+%Y-%m-%d %H:%M UTC')] [skip ci]"
+            git push
+            echo "Changes committed and pushed"
+          fi

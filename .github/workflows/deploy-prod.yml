@@ -1,0 +1,153 @@
+# =============================================================================
+# WORKFLOW: Deploy to PRODUCTION Environment
+# =============================================================================
+# TRIGGER: Git release tag (v1.0.0, v1.2.3, etc.) — NEVER auto on push
+# PURPOSE: Controlled production releases tied to versioned release tags.
+#
+# SAFETY GATES:
+#   1. Only triggers on version tags (not branch pushes)
+#   2. GitHub Environment "production" can require manual approval
+#      (Settings → Environments → production → Required reviewers)
+#   3. Uses Upgrade strategy (2-phase) for safe rollout
+#   4. Posts release notes to GitHub Release automatically
+#
+# DEPLOYMENT STRATEGY:
+#   Uses "Upgrade" (2-phase) instead of "Update":
+#   - Phase 1: Import as "holding" — new version staged, old still live
+#   - Phase 2: Apply upgrade — swap happens atomically, old version removed
+#   This ensures zero downtime and clean rollback if Phase 1 fails.
+# =============================================================================
+
+name: Deploy to PRODUCTION
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"   # v1.0.0, v1.2.3, etc.
+
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version being deployed (for release notes)"
+        required: true
+        default: "manual"
+
+jobs:
+  # ── STAGE 1: Build + Validate ──────────────────────────────────────────────
+
+  validate:
+    name: Final Validation Before PROD
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout at tag
+        uses: actions/checkout@v4
+
+      - name: Install PAC CLI
+        run: npm install -g @microsoft/power-platform-cli
+
+      - name: Pack all solutions
+        run: |
+          pwsh ./pipeline/import/import-solution.ps1 \
+            -TargetUrl "${{ secrets.PP_PROD_URL }}" \
+            -TenantId "${{ secrets.PP_TENANT_ID }}" \
+            -AppId "${{ secrets.PP_APP_ID }}" \
+            -ClientSecret "${{ secrets.PP_CLIENT_SECRET }}" \
+            -DryRun
+
+      - name: Solution Checker (strict mode for PROD)
+        run: |
+          pwsh ./pipeline/validate/validate-solution.ps1 \
+            -FailOn High \
+            -Geo UnitedStates
+        # PROD: same threshold as TEST — High+ blocks deployment
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-managed-solutions-${{ github.ref_name }}
+          path: ./artifacts/*.zip
+          retention-days: 90    # Keep PROD artifacts 90 days for rollback
+
+  # ── STAGE 2: Deploy to PROD ────────────────────────────────────────────────
+
+  deploy-prod:
+    name: Deploy → PRODUCTION
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: production     # Requires manual approval (configure in GitHub Settings)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PAC CLI
+        run: npm install -g @microsoft/power-platform-cli
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: prod-managed-solutions-${{ github.ref_name }}
+          path: ./artifacts/
+
+      - name: Authenticate to PROD
+        run: |
+          pac auth create \
+            --url "${{ secrets.PP_PROD_URL }}" \
+            --tenant "${{ secrets.PP_TENANT_ID }}" \
+            --applicationId "${{ secrets.PP_APP_ID }}" \
+            --clientSecret "${{ secrets.PP_CLIENT_SECRET }}"
+
+      - name: Deploy with Upgrade strategy (safe 2-phase)
+        run: |
+          pwsh ./pipeline/import/import-solution.ps1 \
+            -TargetUrl "${{ secrets.PP_PROD_URL }}" \
+            -TenantId "${{ secrets.PP_TENANT_ID }}" \
+            -AppId "${{ secrets.PP_APP_ID }}" \
+            -ClientSecret "${{ secrets.PP_CLIENT_SECRET }}" \
+            -ConnectionRefsFile "./connection-references/prod-mappings.json" \
+            -Strategy Upgrade \     # 2-phase: stage → apply
+            -ActivatePlugins
+
+      - name: Set PROD environment variables
+        run: |
+          pac env-var set --schema-name halyse_ApiEndpoint \
+            --value "${{ secrets.PROD_API_ENDPOINT }}"
+          pac env-var set --schema-name halyse_MaxRetries \
+            --value "5"
+
+      - name: Verify deployment
+        run: |
+          echo "=== Production Solutions ==="
+          pac solution list | grep -i halyse
+
+      - name: Update GitHub Release with deployment info
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = context.ref.replace('refs/tags/', '');
+            const releases = await github.rest.repos.listReleases({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const release = releases.data.find(r => r.tag_name === tag);
+            if (release) {
+              const body = release.body + `\n\n---\n✅ **Deployed to PRODUCTION** at ${new Date().toUTCString()}`;
+              await github.rest.repos.updateRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.id,
+                body,
+              });
+            }
+
+      - name: Post deployment summary
+        if: always()
+        run: |
+          echo "## 🚀 Production Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ secrets.PP_PROD_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Strategy:** Upgrade (2-phase)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployed at:** $(date -u '+%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
